@@ -13,21 +13,34 @@ const ASSETS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
-  self.skipWaiting(); // neues Update sofort aktivieren
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
-  // alte Cache-Versionen automatisch löschen
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
-  self.clients.claim(); // alle offenen Tabs sofort aktualisieren
+  self.clients.claim();
 });
 
+// Network-first: immer frische Dateien wenn online, Cache als Fallback wenn offline
 self.addEventListener('fetch', e => {
+  // Nur GET-Requests abfangen
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => cached))
+    fetch(e.request)
+      .then(networkRes => {
+        // Antwort im Cache aktualisieren
+        const clone = networkRes.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return networkRes;
+      })
+      .catch(() => {
+        // Offline: aus Cache bedienen
+        return caches.match(e.request);
+      })
   );
 });
