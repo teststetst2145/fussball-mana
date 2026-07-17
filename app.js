@@ -428,6 +428,11 @@ function vSessionDetail(id) {
     </div>
     ${s.type==='game' ? `<button class="btn btn-secondary" style="margin-top:12px;width:100%;"
       onclick="nav('lineup',{id:'${id}'})">📋 Aufstellung bearbeiten</button>` : ''}
+  </div>
+  <div class="section" style="margin-bottom:4px;">
+    <div class="section-title">📝 Notizen / Ablaufplan</div>
+    <textarea class="inp" id="sessNotes" placeholder="Ablaufplan, Übungen, Hinweise…"
+      onblur="saveSessionNotes('${id}')" style="min-height:110px;margin-top:4px;">${h(s.notes||'')}</textarea>
   </div>`;
 
   const items = ps.map(p => {
@@ -508,6 +513,54 @@ function vPenaltiesList() {
       <p>Erstelle Strafen um sie Spielern zuzuweisen.</p>
     </div>`;
 
+  // Ranking: all players with penalties, sorted by count
+  const rankPlayers = ps
+    .map(p => {
+      const pens = playerPens(p.id);
+      return { p, count: pens.length, owed: pens.filter(x=>!x.paid).reduce((s,x)=>s+(x.amount||0),0) };
+    })
+    .filter(r => r.count > 0)
+    .sort((a,b) => b.count - a.count || b.owed - a.owed);
+
+  const rankingSection = rankPlayers.length ? `
+    <div class="divider-title">🏆 Strafenranking</div>
+    <div style="margin:0 var(--pad);">
+      <div class="section" style="padding:0;overflow:hidden;">
+        ${rankPlayers.map((r,i) => {
+          const av = r.p.photo
+            ? `<img src="${r.p.photo}" alt="${h(r.p.name)}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;">`
+            : `<div class="avatar av-sm">${initials(r.p.name)}</div>`;
+          const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="font-size:13px;font-weight:900;color:var(--muted);width:24px;text-align:center;">#${i+1}</span>`;
+          return `<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);" onclick="nav('player-detail',{id:'${r.p.id}'})">
+            <span style="font-size:20px;width:28px;text-align:center;flex-shrink:0;">${medal}</span>
+            ${av}
+            <span style="flex:1;font-weight:800;font-size:14px;">${h(r.p.name)}</span>
+            <span style="font-size:13px;color:var(--muted);margin-right:8px;">${r.count}×</span>
+            ${r.owed>0?`<span style="font-size:13px;font-weight:900;color:var(--red);">${fmtEuro(r.owed)} offen</span>`:`<span style="font-size:13px;color:var(--green);font-weight:800;">✓</span>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  // Total paid / owed across all players
+  const allPens = APP.data.penalties;
+  const totalPaid = allPens.filter(x => x.paid).reduce((s,x) => s+(x.amount||0), 0);
+  const totalOwed = allPens.filter(x => !x.paid).reduce((s,x) => s+(x.amount||0), 0);
+  const totalSection = allPens.length ? `
+    <div class="divider-title">💶 Kasse gesamt</div>
+    <div style="margin:0 var(--pad);">
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-size:14px;color:var(--muted);font-weight:700;">✅ Bereits bezahlt</span>
+          <span style="font-size:18px;font-weight:900;color:var(--green);">${fmtEuro(totalPaid)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:14px;color:var(--muted);font-weight:700;">⏳ Noch offen</span>
+          <span style="font-size:18px;font-weight:900;color:var(--red);">${fmtEuro(totalOwed)}</span>
+        </div>
+      </div>
+    </div>` : '';
+
   const withPens = ps.filter(p => playerPens(p.id).length > 0);
   const ovSection = withPens.length ? `
     <div class="divider-title">Strafenübersicht</div>
@@ -545,6 +598,8 @@ function vPenaltiesList() {
   return `
     <div class="divider-title">Strafenkatalog</div>
     ${catSection}
+    ${rankingSection}
+    ${totalSection}
     ${ovSection ? `<div style="margin-top:6px;">${ovSection}</div>` : ''}
     ${isUnlocked ? '<div class="divider-title">Daten</div>' : ''}
     ${backupSection}
@@ -720,10 +775,22 @@ function setAtt(sessId, pid, status) {
   if (!a) { a = { pid, status: null }; s.att.push(a); }
   a.status = a.status === status ? null : status; // toggle
   upsertSession(s);
+  const scrollTop = document.querySelector('.content')?.scrollTop || 0;
   render();
+  const newContent = document.querySelector('.content');
+  if (newContent) newContent.scrollTop = scrollTop;
 }
 
 function doPaid(id) { togglePaid(id); nav('player-detail', { id: APP.params.id }); }
+
+function saveSessionNotes(sessId) {
+  const s = session(sessId);
+  if (!s) return;
+  const textarea = document.getElementById('sessNotes');
+  if (!textarea) return;
+  s.notes = textarea.value;
+  upsertSession(s);
+}
 
 // ============================================================
 // SAVE ACTIONS
@@ -744,7 +811,7 @@ function doSaveSession(id) {
   const typeEl = document.querySelector('input[name="stype"]:checked');
   const type   = typeEl ? typeEl.value : 'training';
   const title  = document.getElementById('sTitle').value.trim();
-  const s = { id: id||uid(), date, type, title, att: id ? (session(id)?.att||[]) : [] };
+  const s = { id: id||uid(), date, type, title, att: id ? (session(id)?.att||[]) : [], notes: id ? (session(id)?.notes||'') : '' };
   upsertSession(s);
   APP.sessFilter = type;
   nav('session-detail', { id: s.id });
