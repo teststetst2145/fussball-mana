@@ -519,10 +519,25 @@ function vPenaltiesList() {
       </div>`;
     }).join('')}` : '';
 
+  const isUnlocked = players().some(p => p.name.trim().toLowerCase() === 'dasdarfnurichmachen');
+  const backupSection = isUnlocked ? `
+    <div class="backup-card">
+      <div class="backup-title">📦 Datensicherung</div>
+      <div class="backup-sub">
+        Alle Daten (Spieler, Termine, Strafen) exportieren um sie auf einem neuen Gerät wiederherzustellen.
+      </div>
+      <div class="backup-btns">
+        <button class="btn btn-ghost" onclick="exportData()">⬇️ Exportieren</button>
+        <button class="btn btn-ghost" onclick="importData()">⬆️ Importieren</button>
+      </div>
+    </div>` : '';
+
   return `
     <div class="divider-title">Strafenkatalog</div>
     ${catSection}
-    ${ovSection}
+    ${ovSection ? `<div style="margin-top:6px;">${ovSection}</div>` : ''}
+    ${isUnlocked ? '<div class="divider-title">Daten</div>' : ''}
+    ${backupSection}
     <div class="spacer"></div>
     <button class="fab" onclick="nav('penalty-form',{})">+</button>`;
 }
@@ -814,6 +829,60 @@ function registerSW() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
+}
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+function exportData() {
+  const date    = new Date().toISOString().slice(0, 10);
+  const json    = JSON.stringify(APP.data, null, 2);
+  const blob    = new Blob([json], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = `fussball-backup-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  const input    = document.createElement('input');
+  input.type     = 'file';
+  input.accept   = '.json,application/json';
+  input.onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      // Validate basic structure
+      if (!Array.isArray(data.players) || !Array.isArray(data.sessions) ||
+          !Array.isArray(data.catalog) || !Array.isArray(data.penalties)) {
+        showAlert('Ungültige Datei', 'Diese Datei ist kein gültiges Fußball Manager Backup.');
+        return;
+      }
+      const ps = data.players.length;
+      const ss = data.sessions.length;
+      showConfirm(
+        'Daten importieren',
+        `Backup enthält ${ps} Spieler und ${ss} Termine. Alle aktuellen Daten werden überschrieben. Fortfahren?`,
+        () => {
+          APP.data = data;
+          persist();
+          nav('players-list');
+          setTimeout(() => showAlert('Fertig ✓', 'Daten erfolgreich importiert!'), 200);
+        }
+      );
+    } catch (_) {
+      showAlert('Fehler', 'Die Datei konnte nicht gelesen werden.');
+    }
+  };
+  document.body.appendChild(input);
+  input.click();
+  document.body.removeChild(input);
 }
 
 // ============================================================
