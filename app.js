@@ -10,6 +10,7 @@ const APP = {
   params: {},
   sessFilter: 'training',
   data: null,
+  history: [],
 };
 
 // ============================================================
@@ -127,6 +128,10 @@ function pctTxt(pct) {
 // NAVIGATION
 // ============================================================
 function nav(view, params = {}) {
+  if (APP.view !== view) {
+    APP.history.push({ view: APP.view, params: APP.params });
+    if (APP.history.length > 20) APP.history.shift();
+  }
   APP.view = view;
   APP.params = params;
   render();
@@ -1075,4 +1080,28 @@ document.addEventListener('DOMContentLoaded', () => {
   APP.data = loadData();
   render();
   registerSW();
+  initSwipeBack();
 });
+
+function initSwipeBack() {
+  let startX = 0, startY = 0;
+  document.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    // Swipe von links nach rechts (mindestens 60px, mehr horizontal als vertikal)
+    if (dx > 60 && Math.abs(dy) < Math.abs(dx) * 0.6) {
+      if (APP.history.length > 0) {
+        const prev = APP.history.pop();
+        APP.view = prev.view;
+        APP.params = prev.params;
+        render();
+      } else {
+        back();
+      }
+    }
+  }, { passive: true });
+}
