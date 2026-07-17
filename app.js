@@ -138,6 +138,7 @@ function back() {
     'session-detail': () => nav('sessions-list'),
     'session-form':   () => nav('sessions-list'),
     'penalty-form':   () => nav('penalties-list'),
+    'lineup':         () => nav('session-detail', { id: APP.params.id }),
   };
   (map[APP.view] || (() => nav('players-list')))();
 }
@@ -157,6 +158,7 @@ function render() {
     'session-form':  () => vSessionForm(APP.params.id),
     'penalties-list':vPenaltiesList,
     'penalty-form':  () => vPenaltyForm(APP.params.id),
+    'lineup':        () => vLineup(APP.params.id),
   };
   const fn = viewMap[APP.view] || (() => '<div class="empty"><p>?</p></div>');
   app.innerHTML = hdr(sub) + `<div class="content">${fn()}</div>` + (sub ? '' : navBar());
@@ -174,6 +176,7 @@ function hdr(isBack) {
     'session-detail':(() => { const s = session(APP.params.id); return s ? h(s.title || fmtDate(s.date)) : 'Termin'; })(),
     'session-form':  APP.params.id ? 'Termin bearbeiten' : 'Neuer Termin',
     'penalty-form':  APP.params.id ? 'Strafe bearbeiten' : 'Neue Strafe',
+    'lineup':        (() => { const s = session(APP.params.id); return '📋 ' + (s?.title || fmtDate(s?.date) || 'Aufstellung'); })(),
   };
   const extra = (() => {
     if (APP.view === 'player-detail')
@@ -418,6 +421,8 @@ function vSessionDetail(id) {
       ${s.type==='training'?'🏃 Training':'⚽ Spiel'} · ${fmtDate(s.date)}
       ${s.title?`· ${h(s.title)}`:''}
     </div>
+    ${s.type==='game' ? `<button class="btn btn-secondary" style="margin-top:12px;width:100%;"
+      onclick="nav('lineup',{id:'${id}'})">📋 Aufstellung bearbeiten</button>` : ''}
   </div>`;
 
   const items = ps.map(p => {
@@ -429,7 +434,7 @@ function vSessionDetail(id) {
       <div class="att-name">${h(p.name)}</div>
       <div class="att-btns">
         <button class="att-btn ${st==='p'?'p':''}" onclick="setAtt('${id}','${p.id}','p')" title="Anwesend">✓</button>
-        <button class="att-btn ${st==='e'?'e':''}" onclick="setAtt('${id}','${p.id}','e')" title="Entschuldigt">E</button>
+        <button class="att-btn ${st==='e'?'e':''}" onclick="setAtt('${id}','${p.id}','e')" title="Entschuldigt">✕</button>
         <button class="att-btn ${st==='u'?'u':''}" onclick="setAtt('${id}','${p.id}','u')" title="Unentschuldigt">U</button>
       </div>
     </div>`;
@@ -781,6 +786,8 @@ function postRender() {
       });
     });
   });
+  // Lineup drag & drop
+  if (APP.view === 'lineup') initLineupDrag(APP.params.id);
 }
 
 async function compressImg(file) {
@@ -820,6 +827,165 @@ function fmtDate(d) {
 function fmtEuro(n) {
   if (n===undefined||n===null) return '–';
   return new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(n);
+}
+
+// ============================================================
+// VIEW: LINEUP
+// ============================================================
+function vLineup(sessId) {
+  const s = session(sessId);
+  if (!s) return '<div class="empty"><p>Spiel nicht gefunden.</p></div>';
+  const ps = players();
+  if (!ps.length) return `<div class="empty"><div class="ico">👥</div>
+    <h3>Keine Spieler</h3><p>Füge zuerst Spieler hinzu.</p></div>`;
+
+  if (!s.lineup) s.lineup = { field: [], bench: [] };
+  const fieldPlayers = s.lineup.field || [];
+  const benchPids   = s.lineup.bench || [];
+  const poolPids    = ps
+    .filter(p => !fieldPlayers.find(f => f.pid === p.id) && !benchPids.includes(p.id))
+    .map(p => p.id);
+
+  function token(pid, area, style = '') {
+    const p = player(pid);
+    if (!p) return '';
+    const av = p.photo ? `<img src="${p.photo}" alt="">` : h(p.name[0].toUpperCase());
+    return `<div class="lu-token" data-pid="${p.id}" data-area="${area}" style="${style}" title="${h(p.name)}">
+      <div class="lu-av">${av}</div>
+      <div class="lu-name">${h(p.name.split(' ')[0])}</div>
+    </div>`;
+  }
+
+  const fieldTokens = fieldPlayers.map(fp =>
+    token(fp.pid, 'field', `left:${fp.x}%;top:${fp.y}%;transform:translate(-50%,-50%);position:absolute;`)
+  ).join('');
+
+  const benchTokens = benchPids.map(pid => token(pid, 'bench')).join('');
+  const poolTokens  = poolPids.map(pid  => token(pid, 'pool')).join('');
+
+  return `
+    <div class="lu-wrap">
+      <div class="lu-hint">Spieler auf das Feld oder die Ersatzbank ziehen</div>
+      <div class="lu-field-container">
+        <div class="lu-field" id="luField">
+          <div class="lu-line lu-center-line"></div>
+          <div class="lu-circle lu-center-circle"></div>
+          <div class="lu-dot lu-center-dot"></div>
+          <div class="lu-box lu-box-top"></div>
+          <div class="lu-box lu-box-bot"></div>
+          <div class="lu-goal lu-goal-top"></div>
+          <div class="lu-goal lu-goal-bot"></div>
+          ${fieldTokens}
+        </div>
+      </div>
+      <div class="lu-zone lu-bench-zone">
+        <div class="lu-zone-title">🪑 Ersatzbank</div>
+        <div class="lu-zone-body" id="luBench">${benchTokens}</div>
+      </div>
+      ${poolPids.length ? `
+      <div class="lu-zone lu-pool-zone">
+        <div class="lu-zone-title">👥 Nicht eingeplant</div>
+        <div class="lu-zone-body" id="luPool">${poolTokens}</div>
+      </div>` : ''}
+    </div>`;
+}
+
+// ============================================================
+// LINEUP DRAG & DROP
+// ============================================================
+function initLineupDrag(sessId) {
+  const fieldEl = document.getElementById('luField');
+  if (!fieldEl) return;
+
+  document.querySelectorAll('.lu-token').forEach(token => {
+    token.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      token.setPointerCapture(e.pointerId);
+
+      const pid = token.dataset.pid;
+      const r   = token.getBoundingClientRect();
+      const hw  = r.width / 2;
+      const hh  = r.height / 2;
+
+      // Create floating ghost
+      const ghost = document.createElement('div');
+      ghost.className = 'lu-token lu-ghost';
+      ghost.innerHTML = token.innerHTML;
+      ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;pointer-events:none;z-index:999;`;
+      document.body.appendChild(ghost);
+      token.classList.add('lu-dragging');
+
+      function onMove(ev) {
+        ev.preventDefault();
+        ghost.style.left = (ev.clientX - hw) + 'px';
+        ghost.style.top  = (ev.clientY - hh) + 'px';
+      }
+
+      function onUp(ev) {
+        token.removeEventListener('pointermove', onMove);
+        token.removeEventListener('pointerup',   onUp);
+        token.removeEventListener('pointercancel', onUp);
+        token.classList.remove('lu-dragging');
+
+        // Hide ghost to find element underneath
+        ghost.style.display = 'none';
+        const below = document.elementFromPoint(ev.clientX, ev.clientY);
+        ghost.remove();
+
+        const fEl = document.getElementById('luField');
+        const bEl = document.getElementById('luBench');
+        const pEl = document.getElementById('luPool');
+
+        if (fEl && (fEl === below || fEl.contains(below))) {
+          const fr = fEl.getBoundingClientRect();
+          const x = Math.max(6, Math.min(94, ((ev.clientX - fr.left) / fr.width)  * 100));
+          const y = Math.max(6, Math.min(94, ((ev.clientY - fr.top)  / fr.height) * 100));
+          luPlaceField(sessId, pid, x, y);
+        } else if (bEl && (bEl === below || bEl.contains(below))) {
+          luPlaceBench(sessId, pid);
+        } else if (pEl && (pEl === below || pEl.contains(below))) {
+          luRemove(sessId, pid);
+        }
+        // else: dropped outside → no change, just re-render
+      }
+
+      token.addEventListener('pointermove', onMove);
+      token.addEventListener('pointerup',   onUp);
+      token.addEventListener('pointercancel', onUp);
+    });
+  });
+}
+
+function luPlaceField(sessId, pid, x, y) {
+  const s = session(sessId);
+  if (!s) return;
+  if (!s.lineup) s.lineup = { field: [], bench: [] };
+  s.lineup.field = s.lineup.field.filter(f => f.pid !== pid);
+  s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
+  s.lineup.field.push({ pid, x, y });
+  upsertSession(s);
+  nav('lineup', { id: sessId });
+}
+
+function luPlaceBench(sessId, pid) {
+  const s = session(sessId);
+  if (!s) return;
+  if (!s.lineup) s.lineup = { field: [], bench: [] };
+  s.lineup.field = s.lineup.field.filter(f => f.pid !== pid);
+  s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
+  s.lineup.bench.push(pid);
+  upsertSession(s);
+  nav('lineup', { id: sessId });
+}
+
+function luRemove(sessId, pid) {
+  const s = session(sessId);
+  if (!s) return;
+  if (!s.lineup) s.lineup = { field: [], bench: [] };
+  s.lineup.field = s.lineup.field.filter(f => f.pid !== pid);
+  s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
+  upsertSession(s);
+  nav('lineup', { id: sessId });
 }
 
 // ============================================================
