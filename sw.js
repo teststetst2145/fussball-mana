@@ -1,5 +1,5 @@
 // ⬇️ DIESE ZAHL ERHÖHEN wenn du ein Update hochlädst (z.B. v2, v3, ...)
-const CACHE = 'fussball-v6';
+const CACHE = 'fussball-v8';
 
 const ASSETS = [
   './',
