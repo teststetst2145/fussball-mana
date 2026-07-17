@@ -168,7 +168,7 @@ function render() {
 
 function hdr(isBack) {
   const titles = {
-    'players-list':  '⚽ Mannschaft',
+    'players-list':  '⚽ Arnsdorfer FV',
     'sessions-list': '📅 Termine',
     'penalties-list':'💰 Strafen',
     'player-detail': h(player(APP.params.id)?.name) || 'Spieler',

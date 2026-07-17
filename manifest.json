@@ -1,11 +1,11 @@
-{
-  "name": "Fußball Manager",
-  "short_name": "FußballMgr",
-  "description": "Spielerverwaltung für Trainer",
+﻿{
+  "name": "FuÃŸball Manager",
+  "short_name": "FuÃŸballMgr",
+  "description": "Spielerverwaltung fÃ¼r Trainer",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#1e3a5f",
+  "background_color": "#060b18",
+  "theme_color": "#16287a",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -22,3 +22,4 @@
     }
   ]
 }
+
