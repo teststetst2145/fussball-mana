@@ -225,7 +225,7 @@ function vPlayersList() {
     const owed = unpaidTotal(p.id);
     const av = p.photo
       ? `<img src="${p.photo}" alt="${h(p.name)}">`
-      : h(p.name[0].toUpperCase());
+      : initials(p.name);
     return `<div class="player-card" onclick="nav('player-detail',{id:'${p.id}'})">
       ${owed > 0 ? `<div class="badge">€${owed.toFixed(2)}</div>` : ''}
       <div class="avatar av-md">${av}</div>
@@ -259,7 +259,7 @@ function vPlayerDetail(id) {
   const pens = playerPens(id);
   const owed = pens.filter(x => !x.paid).reduce((s,x) => s+(x.amount||0), 0);
   const sugg = suggestions(id);
-  const av = p.photo ? `<img src="${p.photo}" alt="${h(p.name)}">` : h(p.name[0].toUpperCase());
+  const av = p.photo ? `<img src="${p.photo}" alt="${h(p.name)}">` : initials(p.name);
 
   function sBar(stat, label) {
     const pct = stat.pct, w = pct??0;
@@ -433,7 +433,7 @@ function vSessionDetail(id) {
   const items = ps.map(p => {
     const a = s.att.find(x => x.pid === p.id);
     const st = a?.status || null;
-    const av = p.photo ? `<img src="${p.photo}" alt="${h(p.name)}">` : h(p.name[0].toUpperCase());
+    const av = p.photo ? `<img src="${p.photo}" alt="${h(p.name)}">` : initials(p.name);
     return `<div class="att-item">
       <div class="avatar av-sm">${av}</div>
       <div class="att-name">${h(p.name)}</div>
@@ -516,7 +516,7 @@ function vPenaltiesList() {
       const owed = pens.filter(x=>!x.paid).reduce((s,x)=>s+(x.amount||0),0);
       const av = p.photo
         ? `<img src="${p.photo}" alt="${h(p.name)}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;">`
-        : `<div class="avatar av-sm">${h(p.name[0].toUpperCase())}</div>`;
+        : `<div class="avatar av-sm">${initials(p.name)}</div>`;
       return `<div class="ov-item">
         <div class="ov-row" onclick="nav('player-detail',{id:'${p.id}'})">
           ${av}
@@ -824,6 +824,12 @@ function h(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 function fmtDate(d) {
   if (!d) return '';
   return new Date(d + 'T12:00:00').toLocaleDateString('de-DE',
@@ -854,7 +860,7 @@ function vLineup(sessId) {
   function token(pid, area, style = '') {
     const p = player(pid);
     if (!p) return '';
-    const av = p.photo ? `<img src="${p.photo}" alt="">` : h(p.name[0].toUpperCase());
+    const av = p.photo ? `<img src="${p.photo}" alt="">` : initials(p.name);
     return `<div class="lu-token" data-pid="${p.id}" data-area="${area}" style="${style}" title="${h(p.name)}">
       <div class="lu-av">${av}</div>
       <div class="lu-name">${h(p.name.split(' ')[0])}</div>
