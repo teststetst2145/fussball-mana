@@ -171,6 +171,13 @@ function render() {
   postRender();
 }
 
+function renderKeepScroll() {
+  const scrollTop = document.querySelector('.content')?.scrollTop || 0;
+  render();
+  const newContent = document.querySelector('.content');
+  if (newContent) newContent.scrollTop = scrollTop;
+}
+
 function hdr(isBack) {
   const titles = {
     'players-list':  '⚽ Arnsdorfer FV',
@@ -435,7 +442,14 @@ function vSessionDetail(id) {
       onblur="saveSessionNotes('${id}')" style="min-height:110px;margin-top:4px;">${h(s.notes||'')}</textarea>
   </div>`;
 
-  const items = ps.map(p => {
+  const rank = st => (st === 'p' ? 0 : st === 'e' ? 1 : st === 'u' ? 3 : 2);
+  const sortedPs = [...ps].sort((a, b) => {
+    const ra = rank(s.att.find(x => x.pid === a.id)?.status || null);
+    const rb = rank(s.att.find(x => x.pid === b.id)?.status || null);
+    return ra - rb;
+  });
+
+  const items = sortedPs.map(p => {
     const a = s.att.find(x => x.pid === p.id);
     const st = a?.status || null;
     const av = p.photo ? `<img src="${p.photo}" alt="${h(p.name)}">` : initials(p.name);
@@ -918,6 +932,11 @@ function vLineup(sessId) {
     <h3>Keine Spieler</h3><p>Füge zuerst Spieler hinzu.</p></div>`;
 
   if (!s.lineup) s.lineup = { field: [], bench: [] };
+  // Solange noch niemand aufs Feld gezogen wurde, folgt die Bank laufend der Anwesenheit.
+  if (!(s.lineup.field || []).length) {
+    s.lineup.bench = (s.att || []).filter(a => a.status === 'p').map(a => a.pid);
+    upsertSession(s);
+  }
   const fieldPlayers = s.lineup.field || [];
   const benchPids   = s.lineup.bench || [];
   const poolPids    = ps
@@ -1042,7 +1061,7 @@ function luPlaceField(sessId, pid, x, y) {
   s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
   s.lineup.field.push({ pid, x, y });
   upsertSession(s);
-  nav('lineup', { id: sessId });
+  renderKeepScroll();
 }
 
 function luPlaceBench(sessId, pid) {
@@ -1053,7 +1072,7 @@ function luPlaceBench(sessId, pid) {
   s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
   s.lineup.bench.push(pid);
   upsertSession(s);
-  nav('lineup', { id: sessId });
+  renderKeepScroll();
 }
 
 function luRemove(sessId, pid) {
@@ -1063,7 +1082,7 @@ function luRemove(sessId, pid) {
   s.lineup.field = s.lineup.field.filter(f => f.pid !== pid);
   s.lineup.bench = s.lineup.bench.filter(b => b !== pid);
   upsertSession(s);
-  nav('lineup', { id: sessId });
+  renderKeepScroll();
 }
 
 // ============================================================
